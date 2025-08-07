@@ -1,10 +1,10 @@
-# userview.py
-
 from Control import UserManager
+from Excecoes import ValidaCampoException
 
 class UserView:
-    def __init__(self):
+    def init(self):
         self.manager = UserManager()
+        self.manager.carregar_usuarios()  # Carrega dados da persistência
 
     def exibir_menu(self):
         while True:
@@ -28,11 +28,16 @@ class UserView:
                 print("Opção inválida.")
 
     def cadastrar_usuario(self):
-        nome = input("Nome: ")
-        login = input("Login: ")
-        senha = input("Senha: ")
-        sucesso, msg = self.manager.cadastrar_usuario(nome, login, senha)
-        print(msg)
+        try:
+            nome = input("Nome: ")
+            login = input("Login: ")
+            senha = input("Senha: ")
+            sucesso, msg = self.manager.cadastrar_usuario(nome, login, senha)
+            print(msg)
+            if sucesso:
+                self.manager.salvar_usuarios()  # Salva no arquivo
+        except ValidaCampoException as e:
+            print(f"Erro: {str(e)}")
 
     def listar_usuarios(self):
         usuarios = self.manager.listar_usuarios()
@@ -46,8 +51,11 @@ class UserView:
     def fazer_login(self):
         login = input("Login: ")
         senha = input("Senha: ")
-        sucesso, usuario = self.manager.autenticar(login, senha)
-        if sucesso:
-            print(f"Login bem-sucedido. Bem-vindo(a), {usuario.nome}!")
-        else:
-            print("Login ou senha incorretos.")
+        try:
+            sucesso, usuario = self.manager.autenticar(login, senha)
+            if sucesso:
+                print(f"Login bem-sucedido. Bem-vindo(a), {usuario.nome}!")
+            else:
+                print("Login ou senha incorretos.")
+        except ValidaCampoException as e:
+            print(f"Erro: {str(e)}")

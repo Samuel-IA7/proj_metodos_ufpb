@@ -1,158 +1,162 @@
-# main.py (Versão Interativa Completa)
-
+# main.py (menus completos; sem Adapter)
 from controller import FacadeSingletonController
 from exceptions import *
 from models import Usuario
-from typing import Optional
 
-# Funções de interface para USUÁRIO LOGADO
 def menu_usuario(controller: FacadeSingletonController, usuario_logado: Usuario):
     while True:
         print("\n--- Menu do Usuário ---")
-        print(f"Logado como: {usuario_logado.nome}")
-        print("1. Fazer Nova Reserva")
-        print("2. Minhas Reservas")
-        print("3. Cancelar Reserva")
-        print("4. Consultar Disponibilidade de Salas")
-        print("5. Logout")
-        
-        opcao = input("Escolha uma opção: ")
+        print("1. Consultar disponibilidade por data")
+        print("2. Listar minhas reservas")
+        print("3. Criar reserva")
+        print("4. Cancelar minha reserva")
+        print("5. Sair para o menu principal")
+        op = input("Opção: ").strip()
 
         try:
-            if opcao == '1':
-                print("\n--- Salas Disponíveis ---")
-                salas = controller.sala_manager.listar_salas()
-                for sala in salas: print(sala)
-                sala_id = int(input("Digite o ID da sala desejada: "))
-                data = input("Digite a data (DD/MM/AAAA): ")
-                hora_inicio = input("Digite a hora de início (HH:MM): ")
-                hora_fim = input("Digite a hora de término (HH:MM): ")
-                controller.cadastrar_reserva(usuario_logado, sala_id, data, hora_inicio, hora_fim)
-                print("\n✅ Reserva efetuada com sucesso!")
+            if op == '1':
+                data = input("Data (AAAA-MM-DD): ").strip()
+                disp = controller.consultar_disponibilidade(data)
+                print("\nDisponibilidade:")
+                if not disp:
+                    print("Nenhuma sala cadastrada.")
+                else:
+                    for sala_nome, blocos in disp.items():
+                        print(f"- {sala_nome}: {', '.join(blocos) if blocos else 'Livre o dia todo'}")
 
-            elif opcao == '2':
-                print("\n--- Minhas Reservas ---")
+            elif op == '2':
                 reservas = controller.listar_minhas_reservas(usuario_logado)
-                if not reservas: print("Você não possui reservas.")
-                for r in reservas: print(r)
-            
-            elif opcao == '3':
-                reserva_id = int(input("Digite o ID da reserva a ser cancelada: "))
-                controller.cancelar_reserva(reserva_id, usuario_logado)
-                print("\n✅ Reserva cancelada com sucesso!")
+                if not reservas:
+                    print("\nVocê não possui reservas.")
+                else:
+                    print("\nMinhas reservas:")
+                    for r in reservas:
+                        print(f"ID {r.reserva_id} | Sala: {r.sala.nome} | {r.data} {r.hora_inicio}-{r.hora_fim} | Status: {r.status}")
 
-            elif opcao == '4':
-                data = input("Digite a data para consulta (DD/MM/AAAA): ")
-                disponibilidade = controller.consultar_disponibilidade(data)
-                print("\n--- Disponibilidade para", data, "---")
-                for sala, horarios in disponibilidade.items():
-                    print(f"Sala: {sala} - Horários Ocupados: {', '.join(horarios) if horarios else 'Nenhum'}")
+            elif op == '3':
+                sala_id = int(input("ID da sala: ").strip())
+                data = input("Data (AAAA-MM-DD): ").strip()
+                h_ini = input("Hora início (HH:MM): ").strip()
+                h_fim = input("Hora fim (HH:MM): ").strip()
+                r = controller.cadastrar_reserva(usuario_logado, sala_id, data, h_ini, h_fim)
+                print(f"\n✅ Reserva criada! ID {r.reserva_id} | Sala {r.sala.nome} | {r.data} {r.hora_inicio}-{r.hora_fim}")
 
-            elif opcao == '5':
-                print("\nLogout efetuado.")
-                return # Sai do menu do usuário e volta para o menu principal
+            elif op == '4':
+                rid = int(input("ID da reserva: ").strip())
+                r = controller.cancelar_reserva(rid, usuario_logado)
+                print(f"\n✅ Reserva {r.reserva_id} cancelada.")
+
+            elif op == '5':
+                break
             else:
-                print("\n❌ Opção inválida.")
-        
-        except (ValidarCamposException, PermissaoNegadaException, EntidadeNaoEncontradaException,
-                ConflitoDeReservaException, LimiteDeReservasException, UsuarioBloqueadoException) as e:
-            print(f"\n❌ ERRO: {e}")
-        except ValueError:
-            print("\n❌ ERRO: Entrada inválida. Certifique-se de digitar números onde for solicitado.")
-        except Exception as e:
-            print(f"\n❌ Ocorreu um erro inesperado: {e}")
+                print("❌ Opção inválida.")
 
-# Funções de interface para ADMINISTRADOR LOGADO
+        except Exception as e:
+            print(f"\nErro: {e}")
+
 def menu_admin(controller: FacadeSingletonController, usuario_logado: Usuario):
     while True:
-        print("\n--- Menu do Administrador ---")
-        print(f"Logado como: {usuario_logado.nome} (Admin)")
-        print("\n-- Gerenciar Reservas --")
-        print("1. Ver Todas as Reservas de um Usuário")
-        print("\n-- Gerenciar Salas --")
-        print("2. Cadastrar Nova Sala")
-        print("3. Listar Todas as Salas")
-        print("4. Excluir Sala")
-        print("\n-- Gerenciar Usuários --")
-        print("5. Listar Todos os Usuários")
-        print("6. Bloquear Usuário")
-        print("\n-- Relatórios --")
-        print("7. Relatório de Utilização de Salas")
-        print("\n8. Logout")
-        
-        opcao = input("Escolha uma opção: ")
-        
+        print("\n=== Menu do Administrador ===")
+        print("1. Cadastrar sala")
+        print("2. Excluir sala")
+        print("3. Listar salas")
+        print("4. Listar usuários")
+        print("5. Bloquear usuário")
+        print("6. Gerar relatório de uso das salas")
+        print("7. Listar reservas por usuário")
+        print("8. Consultar disponibilidade por data")
+        print("9. Sair para o menu principal")
+        op = input("Opção: ").strip()
+
         try:
-            if opcao == '1':
-                login_alvo = input("Digite o login do usuário para ver as reservas: ")
-                reservas = controller.admin_listar_reservas_usuario(usuario_logado, login_alvo)
-                if not reservas: print(f"Nenhuma reserva encontrada para o usuário '{login_alvo}'.")
-                for r in reservas: print(r)
+            if op == '1':
+                nome = input("Nome da sala: ").strip()
+                capacidade = int(input("Capacidade: ").strip())
+                recursos_in = input("Recursos (separados por vírgula): ").strip()
+                recursos = [r.strip() for r in recursos_in.split(",")] if recursos_in else []
+                s = controller.admin_cadastrar_sala(usuario_logado, nome, capacidade, recursos)
+                print(f"\n✅ Sala cadastrada: {s.nome} (ID {s.sala_id})")
 
-            elif opcao == '2':
-                nome = input("Nome da sala: ")
-                capacidade = int(input("Capacidade da sala: "))
-                recursos = input("Recursos (separados por vírgula): ").split(',')
-                controller.admin_cadastrar_sala(usuario_logado, nome, capacidade, [r.strip() for r in recursos])
-                print("\n✅ Sala cadastrada com sucesso!")
-
-            elif opcao == '3':
-                salas = controller.admin_listar_salas(usuario_logado)
-                for s in salas: print(s)
-
-            elif opcao == '4':
-                sala_id = int(input("Digite o ID da sala a ser excluída: "))
+            elif op == '2':
+                sala_id = int(input("ID da sala: ").strip())
                 controller.admin_excluir_sala(usuario_logado, sala_id)
-                print("\n✅ Sala excluída com sucesso!")
+                print("\n✅ Sala excluída.")
 
-            elif opcao == '5':
+            elif op == '3':
+                salas = controller.admin_listar_salas(usuario_logado)
+                if not salas:
+                    print("\nNenhuma sala cadastrada.")
+                else:
+                    print("\nSalas cadastradas:")
+                    for s in salas:
+                        print(f"ID {s.sala_id} | {s.nome} | Cap: {s.capacidade} | Recursos: {', '.join(s.recursos) if s.recursos else '—'}")
+
+            elif op == '4':
                 usuarios = controller.admin_listar_usuarios(usuario_logado)
-                for u in usuarios: print(u)
+                print("\nUsuários:")
+                for u in usuarios:
+                    status = "BLOQUEADO" if getattr(u, 'bloqueado', False) else "ativo"
+                    print(f"- {u.login} | {u.nome} | perfil={u.perfil} | {status}")
 
-            elif opcao == '6':
-                login_alvo = input("Digite o login do usuário a ser bloqueado: ")
-                controller.admin_bloquear_usuario(usuario_logado, login_alvo)
-                print(f"\n✅ Usuário '{login_alvo}' bloqueado com sucesso.")
+            elif op == '5':
+                alvo = input("Login do usuário a bloquear: ").strip()
+                controller.admin_bloquear_usuario(usuario_logado, alvo)
+                print("\n✅ Usuário bloqueado.")
 
-            elif opcao == '7':
-                relatorio = controller.admin_gerar_relatorio_uso(usuario_logado)
-                print("\n--- Relatório de Reservas Ativas por Sala ---")
-                for sala, count in relatorio.items():
-                    print(f"Sala: {sala} - Total de Reservas: {count}")
-            
-            elif opcao == '8':
-                print("\nLogout efetuado.")
-                return
+            elif op == '6':
+                rel = controller.admin_gerar_relatorio_uso(usuario_logado)
+                if not rel:
+                    print("\nNenhuma utilização registrada.")
+                else:
+                    print("\nRelatório de uso (reservas ativas por sala):")
+                    for sala, qtd in rel.items():
+                        print(f"- {sala}: {qtd}")
+
+            elif op == '7':
+                login_alvo = input("Login do usuário: ").strip()
+                reservas = controller.admin_listar_reservas_usuario(usuario_logado, login_alvo)
+                if not reservas:
+                    print("\nSem reservas para este usuário.")
+                else:
+                    print("\nReservas do usuário:")
+                    for r in reservas:
+                        print(f"ID {r.reserva_id} | Sala: {r.sala.nome} | {r.data} {r.hora_inicio}-{r.hora_fim} | Status: {r.status}")
+
+            elif op == '8':
+                data = input("Data (AAAA-MM-DD): ").strip()
+                disp = controller.consultar_disponibilidade(data)
+                print("\nDisponibilidade:")
+                if not disp:
+                    print("Nenhuma sala cadastrada.")
+                else:
+                    for sala_nome, blocos in disp.items():
+                        print(f"- {sala_nome}: {', '.join(blocos) if blocos else 'Livre o dia todo'}")
+
+            elif op == '9':
+                break
             else:
-                print("\n❌ Opção inválida.")
+                print("❌ Opção inválida.")
 
-        except (ValidarCamposException, PermissaoNegadaException, EntidadeNaoEncontradaException) as e:
-            print(f"\n❌ ERRO: {e}")
-        except ValueError:
-            print("\n❌ ERRO: Entrada inválida. Certifique-se de digitar números onde for solicitado.")
         except Exception as e:
-            print(f"\n❌ Ocorreu um erro inesperado: {e}")
+            print(f"\nErro: {e}")
 
-# Menu Principal (Deslogado)
 def main():
     controller = FacadeSingletonController.get_instance()
-    
+
     while True:
         print("\n--- Sistema de Reservas (Menu Principal) ---")
         print("1. Fazer Login")
         print("2. Cadastrar Novo Usuário")
         print("3. Sair")
-        
-        opcao = input("Escolha uma opção: ")
+        opcao = input("Escolha uma opção: ").strip()
 
         if opcao == '1':
+            login = input("Login: ")
+            senha = input("Senha: ")
             try:
-                login = input("Login: ")
-                senha = input("Senha: ")
                 sucesso, usuario_logado = controller.autenticar_usuario(login, senha)
-                
                 if sucesso:
-                    print(f"\n✅ Login bem-sucedido!")
+                    print("\n✅ Login bem-sucedido!")
                     if usuario_logado.perfil == 'admin':
                         menu_admin(controller, usuario_logado)
                     else:
@@ -160,7 +164,7 @@ def main():
                 else:
                     print("\n❌ Login ou senha inválidos.")
             except Exception as e:
-                print(f"\n❌ ERRO: {e}")
+                print(f"\nErro: {e}")
 
         elif opcao == '2':
             try:
@@ -170,14 +174,13 @@ def main():
                 controller.cadastrar_usuario(nome, login, senha)
                 print("\n✅ Usuário cadastrado com sucesso! Agora você pode fazer login.")
             except Exception as e:
-                print(f"\n❌ ERRO: {e}")
+                print(f"\nErro: {e}")
 
         elif opcao == '3':
             print("\nSaindo do sistema. Até logo!")
             break
         else:
             print("\n❌ Opção inválida.")
-
 
 if __name__ == "__main__":
     print("Bem-vindo ao sistema! Para começar, use o login padrão de administrador:")

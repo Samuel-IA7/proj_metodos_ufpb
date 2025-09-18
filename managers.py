@@ -1,152 +1,123 @@
-# managers.py
-
-# managers.py
-
-from typing import Tuple, Optional, List, Dict # <- ADICIONE Dict AQUI
-# ... resto do código
+# managers.py (negócio SEM Adapter)
+from typing import Tuple, Optional, List, Dict
 from datetime import datetime
 from models import Usuario, Reserva, Sala
-from repository import RepositoryRAM
+from repository import UserDAO, SalaDAO, ReservaDAO
 from exceptions import *
 
-# --- Constantes de Regras de Negócio ---
 LIMITE_RESERVAS_ATIVAS = 3
 HORA_ABERTURA = 7
 HORA_FECHAMENTO = 22
 
+# ---------- USER ----------
 class UserManager:
-    """Gerencia as operações relacionadas a usuários."""
-    def __init__(self, repositorio: RepositoryRAM):
-        self.repositorio = repositorio
+    def __init__(self, user_dao: UserDAO):
+        self.user_dao = user_dao
 
     def cadastrar_usuario(self, nome: str, login: str, senha: str, perfil: str = 'usuario') -> Usuario:
         if not all([nome, login, senha, perfil]):
             raise ValidarCamposException("Nome, login, senha e perfil não podem ser vazios.")
-        
-        if self.repositorio.buscar_usuario_por_login(login):
+        if self.user_dao.get_by_login(login):
             raise ValidarCamposException(f"O login '{login}' já está em uso.")
-        
-        novo_usuario = Usuario(nome=nome, login=login, senha=senha, perfil=perfil)
-        return self.repositorio.cadastrar_usuario(novo_usuario)
+        novo = Usuario(nome=nome, login=login, senha=senha, perfil=perfil)
+        self.user_dao.add(novo)
+        return novo
 
     def autenticar(self, login: str, senha: str) -> Tuple[bool, Optional[Usuario]]:
         if not login or not senha:
             raise ValidarCamposException("Login e senha são obrigatórios.")
-            
-        usuario = self.repositorio.buscar_usuario_por_login(login)
-        if usuario and usuario.senha == senha:
-            return (True, usuario)
-        return (False, None)
-        
-    def bloquear_usuario(self, login: str):
-        usuario = self.repositorio.buscar_usuario_por_login(login)
-        if not usuario:
-            raise EntidadeNaoEncontradaException("Usuário não encontrado.")
-        usuario.bloqueado = True
+        u = self.user_dao.get_by_login(login)
+        if u and u.senha == senha:
+            return True, u
+        return False, None
 
+    def bloquear_usuario(self, login: str):
+        u = self.user_dao.get_by_login(login)
+        if not u:
+            raise EntidadeNaoEncontradaException("Usuário não encontrado.")
+        u.bloqueado = True
+        self.user_dao.update(u)
+
+    def listar_usuarios(self) -> List[Usuario]:
+        return list(self.user_dao.list_all())
+
+# ---------- SALA ----------
 class SalaManager:
-    """Gerencia as operações relacionadas a salas."""
-    def __init__(self, repositorio: RepositoryRAM):
-        self.repositorio = repositorio
+    def __init__(self, sala_dao: SalaDAO):
+        self.sala_dao = sala_dao
 
     def cadastrar_sala(self, nome: str, capacidade: int, recursos: List[str]) -> Sala:
         if not nome or capacidade <= 0:
             raise ValidarCamposException("Nome e capacidade (maior que zero) são obrigatórios.")
-        nova_sala = Sala(sala_id=0, nome=nome, capacidade=capacidade, recursos=recursos)
-        return self.repositorio.cadastrar_sala(nova_sala)
+        nova = Sala(sala_id=0, nome=nome, capacidade=capacidade, recursos=recursos)
+        return self.sala_dao.add(nova)
 
     def excluir_sala(self, sala_id: int):
-        if not self.repositorio.buscar_sala_por_id(sala_id):
+        if not self.sala_dao.get_by_id(sala_id):
             raise EntidadeNaoEncontradaException("Sala não encontrada.")
-        self.repositorio.excluir_sala(sala_id)
+        self.sala_dao.delete(sala_id)
 
     def listar_salas(self) -> List[Sala]:
-        return self.repositorio.listar_salas()
+        return list(self.sala_dao.list_all())
 
+# ---------- RESERVA ----------
 class ReservaManager:
-    """Gerencia as operações relacionadas a reservas."""
-    def __init__(self, repositorio: RepositoryRAM):
-        self.repositorio = repositorio
+    def __init__(self, reserva_dao: ReservaDAO, user_dao: UserDAO, sala_dao: SalaDAO):
+        self.rdao = reserva_dao
+        self.udao = user_dao
+        self.sdao = sala_dao
 
-    def _validar_conflito(self, nova_reserva: Reserva):
-        reservas_no_dia = self.repositorio.listar_reservas_por_sala_e_data(
-            nova_reserva.sala.sala_id, nova_reserva.data
-        )
-        
-        # Converte strings de tempo para objetos time para comparação
-        novo_inicio = datetime.strptime(nova_reserva.hora_inicio, "%H:%M").time()
-        novo_fim = datetime.strptime(nova_reserva.hora_fim, "%H:%M").time()
-
-        for r_existente in reservas_no_dia:
-            inicio_existente = datetime.strptime(r_existente.hora_inicio, "%H:%M").time()
-            fim_existente = datetime.strptime(r_existente.hora_fim, "%H:%M").time()
-            # Verifica se há qualquer sobreposição de horários
-            if max(novo_inicio, inicio_existente) < min(novo_fim, fim_existente):
+    def _validar_conflito(self, nova: Reserva):
+        reservas_no_dia = self.rdao.list_by_sala_data(nova.sala.sala_id, nova.data)
+        novo_inicio = datetime.strptime(nova.hora_inicio, "%H:%M").time()
+        novo_fim = datetime.strptime(nova.hora_fim, "%H:%M").time()
+        for r_exist in reservas_no_dia:
+            ini = datetime.strptime(r_exist.hora_inicio, "%H:%M").time()
+            fim = datetime.strptime(r_exist.hora_fim, "%H:%M").time()
+            if max(novo_inicio, ini) < min(novo_fim, fim):
                 raise ConflitoDeReservaException(
-                    f"Conflito! A sala já está reservada das {r_existente.hora_inicio} às {r_existente.hora_fim}."
+                    f"Conflito! A sala já está reservada das {r_exist.hora_inicio} às {r_exist.hora_fim}."
                 )
 
     def cadastrar_reserva(self, usuario: Usuario, sala: Sala, data: str, hora_inicio: str, hora_fim: str) -> Reserva:
-        # [RF014] Validação de usuário bloqueado
         if usuario.bloqueado:
             raise UsuarioBloqueadoException("Usuário bloqueado não pode realizar novas reservas.")
-            
-        # [RF015] Validação de horário de funcionamento
         h_inicio = int(hora_inicio.split(':')[0])
         h_fim = int(hora_fim.split(':')[0])
         if not (HORA_ABERTURA <= h_inicio < HORA_FECHAMENTO and HORA_ABERTURA < h_fim <= HORA_FECHAMENTO):
-             raise ValidarCamposException(f"Reservas permitidas apenas entre {HORA_ABERTURA}:00 e {HORA_FECHAMENTO}:00.")
-
-        # [RF013] Validação de limite de reservas ativas
-        reservas_ativas_usuario = self.repositorio.listar_reservas_ativas_por_usuario(usuario)
-        if len(reservas_ativas_usuario) >= LIMITE_RESERVAS_ATIVAS:
+            raise ValidarCamposException(f"Reservas permitidas apenas entre {HORA_ABERTURA}:00 e {HORA_FECHAMENTO}:00.")
+        reservas_ativas = [r for r in self.rdao.list_all() if r.usuario.login == usuario.login and r.status == 'ativa']
+        if len(reservas_ativas) >= LIMITE_RESERVAS_ATIVAS:
             raise LimiteDeReservasException(f"Limite de {LIMITE_RESERVAS_ATIVAS} reservas ativas por usuário atingido.")
-        
-        nova_reserva = Reserva(reserva_id=0, usuario=usuario, sala=sala, data=data, hora_inicio=hora_inicio, hora_fim=hora_fim)
-        
-        # [RF004] Validação de disponibilidade (conflito)
-        self._validar_conflito(nova_reserva)
-        
-        # [RF009] Simulação de Notificação
+        nova = Reserva(reserva_id=0, usuario=usuario, sala=sala, data=data, hora_inicio=hora_inicio, hora_fim=hora_fim)
+        self._validar_conflito(nova)
         print(f"\n[NOTIFICAÇÃO] Olá, {usuario.nome}! Sua reserva da sala '{sala.nome}' para {data} foi confirmada.")
+        return self.rdao.add(nova)
 
-        return self.repositorio.cadastrar_reserva(nova_reserva)
-    
     def cancelar_reserva(self, reserva_id: int, usuario: Usuario) -> Reserva:
-        reserva = self.repositorio.buscar_reserva_por_id(reserva_id)
-        if not reserva:
+        r = self.rdao.get_by_id(reserva_id)
+        if not r:
             raise EntidadeNaoEncontradaException("Reserva não encontrada.")
-        
-        # Permite cancelar se for o dono da reserva OU se for admin
-        if reserva.usuario.login != usuario.login and usuario.perfil != 'admin':
+        if r.usuario.login != usuario.login and usuario.perfil != 'admin':
             raise PermissaoNegadaException("Você só pode cancelar suas próprias reservas.")
-            
-        reserva.status = 'cancelada'
-        return reserva
+        r.status = 'cancelada'
+        self.rdao.update(r)
+        return r
 
     def consultar_disponibilidade(self, data: str) -> Dict[str, List[str]]:
-        """Retorna um dicionário de salas e seus horários ocupados para uma data."""
-        salas = self.repositorio.listar_salas()
-        disponibilidade = {sala.nome: [] for sala in salas}
-        
-        reservas = self.repositorio.listar_reservas()
-        for r in reservas:
+        salas = list(self.sdao.list_all())
+        disponibilidade = {s.nome: [] for s in salas}
+        for r in self.rdao.list_all():
             if r.data == data and r.status == 'ativa':
                 disponibilidade[r.sala.nome].append(f"{r.hora_inicio}-{r.hora_fim}")
         return disponibilidade
-        
+
     def listar_reservas_por_usuario(self, login: str) -> List[Reserva]:
-        usuario = self.repositorio.buscar_usuario_por_login(login)
-        if not usuario:
-            raise EntidadeNaoEncontradaException("Usuário não encontrado.")
-        
-        todas_reservas = self.repositorio.listar_reservas()
-        return [r for r in todas_reservas if r.usuario.login == login]
+        return [r for r in self.rdao.list_all() if r.usuario.login == login]
 
     def gerar_relatorio_uso_salas(self) -> Dict[str, int]:
-        """Gera um relatório simples de contagem de reservas por sala."""
-        relatorio = {}
-        reservas = [r for r in self.repositorio.listar_reservas() if r.status == 'ativa']
-        for r in reservas:
-            relatorio[r.sala.nome] = relatorio.get(r.sala.nome, 0) + 1
-        return relatorio
+        rel: Dict[str, int] = {}
+        for r in self.rdao.list_all():
+            if r.status == 'ativa':
+                rel[r.sala.nome] = rel.get(r.sala.nome, 0) + 1
+        return rel

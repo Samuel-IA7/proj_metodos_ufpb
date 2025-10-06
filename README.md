@@ -11,6 +11,14 @@ Este é um sistema simples em Python para **gerenciamento de usuários com login
 ## 📁 Estrutura de Pastas e Arquivos
 
 
-Para executar:
+## Para Executar:
 python main.py
+
+
+# Considerações
+ * o Id das salas cadastradas começa em 1;
+ * para alterar a colisão de horários é necessário escrever o nome(leniente (permite reservas apenas 5 minutos depois da última) ou estrito (permite reservas logo após o encerramento de uma anterior) )
+
+Obrigado!
+
 

@@ -1,11 +1,12 @@
-# controller.py — com Memento (undo/redo) + troca de Strategy em runtime
+# controller.py — Memento + Strategy + Logger Adapter (SEM Template Method)
 from typing import Tuple, Optional, List, Dict
 from models import Usuario, Reserva, Sala
 from managers import UserManager, ReservaManager, SalaManager
 from exceptions import *
 from dao_factory import RAMDAOFactory
 from memento import HistoryService
-from strategy_conflict import LenientConflictStrategy, StrictConflictStrategy  # <- trocar estratégia
+from strategy_conflict import LenientConflictStrategy, StrictConflictStrategy
+from adapter_logging import PythonLoggingAdapter
 
 class FacadeSingletonController:
     _instance = None
@@ -25,13 +26,18 @@ class FacadeSingletonController:
         self.sala_dao = factory.salas()
         self.reserva_dao = factory.reservas()
 
-        self.user_manager = UserManager(self.user_dao)
-        self.sala_manager = SalaManager(self.sala_dao)
-        self.reserva_manager = ReservaManager(self.reserva_dao, self.user_dao, self.sala_dao)
+        # Adapter de logging
+        self.logger = PythonLoggingAdapter("app")
+
+        # Managers recebem logger
+        self.user_manager = UserManager(self.user_dao, logger=self.logger)
+        self.sala_manager = SalaManager(self.sala_dao, logger=self.logger)
+        self.reserva_manager = ReservaManager(self.reserva_dao, self.user_dao, self.sala_dao, logger=self.logger)
 
         # Caretaker do Memento (histórico de estados)
         self.history = HistoryService(capacity=100)
 
+        # Admin padrão
         if not list(self.user_manager.listar_usuarios()):
             self.user_manager.cadastrar_usuario("Admin Padrão", "admin", "admin", "admin")
 
@@ -47,11 +53,9 @@ class FacadeSingletonController:
         sala = self.sala_dao.get_by_id(sala_id)
         if not sala:
             raise EntidadeNaoEncontradaException(f"Sala com ID {sala_id} não encontrada.")
-        # passa o history para o Originator salvar snapshot antes da operação
         return self.reserva_manager.cadastrar_reserva(usuario, sala, data, hora_inicio, hora_fim, history=self.history)
 
     def cancelar_reserva(self, reserva_id: int, usuario_logado: Usuario) -> Reserva:
-        # snapshot antes da operação
         self.history.push(self.reserva_manager._snapshot())
         return self.reserva_manager.cancelar_reserva(reserva_id, usuario_logado)
 
@@ -68,7 +72,6 @@ class FacadeSingletonController:
 
     def admin_cadastrar_sala(self, usuario_logado: Usuario, nome: str, capacidade: int, recursos: List[str]) -> Sala:
         self._check_admin(usuario_logado)
-        # snapshot antes de alteração de estado
         self.history.push(self.reserva_manager._snapshot())
         return self.sala_manager.cadastrar_sala(nome, capacidade, recursos)
 
@@ -117,7 +120,6 @@ class FacadeSingletonController:
 
     # --- STRATEGY: alternar política de conflito ---
     def definir_estrategia_conflito(self, modo: str) -> str:
-        """Seleciona a política de conflito: 'estrito' (default) ou 'leniente'."""
         if modo.lower().startswith("leni"):
             self.reserva_manager.strategy = LenientConflictStrategy()
             return "Estratégia de conflito definida para: leniente (margem 5min)."

@@ -1,4 +1,4 @@
-# main.py — menus com Undo/Redo + troca de Strategy (admin)
+# main.py — SEM opções de relatório
 from controller import FacadeSingletonController
 from exceptions import *
 from models import Usuario
@@ -70,7 +70,7 @@ def menu_admin(controller: FacadeSingletonController, usuario_logado: Usuario):
         print("3. Listar salas")
         print("4. Listar usuários")
         print("5. Bloquear usuário")
-        print("6. Gerar relatório de uso das salas")
+        print("6. Gerar relatório de uso das salas (contagem por sala)")
         print("7. Listar reservas por usuário")
         print("8. Consultar disponibilidade por data")
         print("9. Desfazer última ação")

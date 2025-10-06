@@ -10,3 +10,7 @@ Este é um sistema simples em Python para **gerenciamento de usuários com login
 
 ## 📁 Estrutura de Pastas e Arquivos
 
+
+Para executar:
+python main.py
+

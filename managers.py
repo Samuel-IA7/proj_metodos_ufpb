@@ -1,9 +1,12 @@
-# managers.py (negócio SEM Adapter)
+# managers.py — negócio com Memento + Strategy
 from typing import Tuple, Optional, List, Dict
 from datetime import datetime
+from copy import deepcopy
 from models import Usuario, Reserva, Sala
 from repository import UserDAO, SalaDAO, ReservaDAO
 from exceptions import *
+from memento import ReservationSnapshot
+from strategy_conflict import ConflictStrategy, StrictConflictStrategy  # <- Strategy
 
 LIMITE_RESERVAS_ATIVAS = 3
 HORA_ABERTURA = 7
@@ -62,24 +65,37 @@ class SalaManager:
 
 # ---------- RESERVA ----------
 class ReservaManager:
-    def __init__(self, reserva_dao: ReservaDAO, user_dao: UserDAO, sala_dao: SalaDAO):
+    def __init__(self, reserva_dao: ReservaDAO, user_dao: UserDAO, sala_dao: SalaDAO,
+                 strategy: ConflictStrategy | None = None):
         self.rdao = reserva_dao
         self.udao = user_dao
         self.sdao = sala_dao
+        self.strategy: ConflictStrategy = strategy or StrictConflictStrategy()  # Strategy padrão
 
+    # ------- MEMENTO: Originator -------
+    def _snapshot(self) -> ReservationSnapshot:
+        return ReservationSnapshot(
+            users=deepcopy(list(self.udao.list_all())),
+            salas=deepcopy(list(self.sdao.list_all())),
+            reservas=deepcopy(list(self.rdao.list_all()))
+        )
+
+    def restore_from(self, snapshot: ReservationSnapshot):
+        self.udao.replace_all(deepcopy(snapshot.users))
+        self.sdao.replace_all(deepcopy(snapshot.salas))
+        self.rdao.replace_all(deepcopy(snapshot.reservas))
+
+    # ------- Conflito usando Strategy -------
     def _validar_conflito(self, nova: Reserva):
         reservas_no_dia = self.rdao.list_by_sala_data(nova.sala.sala_id, nova.data)
-        novo_inicio = datetime.strptime(nova.hora_inicio, "%H:%M").time()
-        novo_fim = datetime.strptime(nova.hora_fim, "%H:%M").time()
-        for r_exist in reservas_no_dia:
-            ini = datetime.strptime(r_exist.hora_inicio, "%H:%M").time()
-            fim = datetime.strptime(r_exist.hora_fim, "%H:%M").time()
-            if max(novo_inicio, ini) < min(novo_fim, fim):
-                raise ConflitoDeReservaException(
-                    f"Conflito! A sala já está reservada das {r_exist.hora_inicio} às {r_exist.hora_fim}."
-                )
+        self.strategy.validar(nova, reservas_no_dia)  # delega à Strategy
 
-    def cadastrar_reserva(self, usuario: Usuario, sala: Sala, data: str, hora_inicio: str, hora_fim: str) -> Reserva:
+    # ------- Regras de reserva -------
+    def cadastrar_reserva(self, usuario: Usuario, sala: Sala, data: str, hora_inicio: str, hora_fim: str, history=None) -> Reserva:
+        # salva snapshot antes de mutação (se houver caretaker)
+        if history is not None:
+            history.push(self._snapshot())
+
         if usuario.bloqueado:
             raise UsuarioBloqueadoException("Usuário bloqueado não pode realizar novas reservas.")
         h_inicio = int(hora_inicio.split(':')[0])

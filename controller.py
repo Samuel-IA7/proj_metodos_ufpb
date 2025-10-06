@@ -1,9 +1,11 @@
-# controller.py (sem Adapter)
+# controller.py — com Memento (undo/redo) + troca de Strategy em runtime
 from typing import Tuple, Optional, List, Dict
 from models import Usuario, Reserva, Sala
 from managers import UserManager, ReservaManager, SalaManager
 from exceptions import *
 from dao_factory import RAMDAOFactory
+from memento import HistoryService
+from strategy_conflict import LenientConflictStrategy, StrictConflictStrategy  # <- trocar estratégia
 
 class FacadeSingletonController:
     _instance = None
@@ -27,6 +29,9 @@ class FacadeSingletonController:
         self.sala_manager = SalaManager(self.sala_dao)
         self.reserva_manager = ReservaManager(self.reserva_dao, self.user_dao, self.sala_dao)
 
+        # Caretaker do Memento (histórico de estados)
+        self.history = HistoryService(capacity=100)
+
         if not list(self.user_manager.listar_usuarios()):
             self.user_manager.cadastrar_usuario("Admin Padrão", "admin", "admin", "admin")
 
@@ -42,9 +47,12 @@ class FacadeSingletonController:
         sala = self.sala_dao.get_by_id(sala_id)
         if not sala:
             raise EntidadeNaoEncontradaException(f"Sala com ID {sala_id} não encontrada.")
-        return self.reserva_manager.cadastrar_reserva(usuario, sala, data, hora_inicio, hora_fim)
+        # passa o history para o Originator salvar snapshot antes da operação
+        return self.reserva_manager.cadastrar_reserva(usuario, sala, data, hora_inicio, hora_fim, history=self.history)
 
     def cancelar_reserva(self, reserva_id: int, usuario_logado: Usuario) -> Reserva:
+        # snapshot antes da operação
+        self.history.push(self.reserva_manager._snapshot())
         return self.reserva_manager.cancelar_reserva(reserva_id, usuario_logado)
 
     def consultar_disponibilidade(self, data: str) -> Dict[str, List[str]]:
@@ -60,10 +68,13 @@ class FacadeSingletonController:
 
     def admin_cadastrar_sala(self, usuario_logado: Usuario, nome: str, capacidade: int, recursos: List[str]) -> Sala:
         self._check_admin(usuario_logado)
+        # snapshot antes de alteração de estado
+        self.history.push(self.reserva_manager._snapshot())
         return self.sala_manager.cadastrar_sala(nome, capacidade, recursos)
 
     def admin_excluir_sala(self, usuario_logado: Usuario, sala_id: int):
         self._check_admin(usuario_logado)
+        self.history.push(self.reserva_manager._snapshot())
         self.sala_manager.excluir_sala(sala_id)
 
     def admin_listar_salas(self, usuario_logado: Usuario) -> List[Sala]:
@@ -78,6 +89,7 @@ class FacadeSingletonController:
         self._check_admin(usuario_logado)
         if usuario_logado.login == login_alvo:
             raise ValidarCamposException("Administrador não pode bloquear a si mesmo.")
+        self.history.push(self.reserva_manager._snapshot())
         self.user_manager.bloquear_usuario(login_alvo)
 
     def admin_gerar_relatorio_uso(self, usuario_logado: Usuario) -> Dict[str, int]:
@@ -87,3 +99,28 @@ class FacadeSingletonController:
     def admin_listar_reservas_usuario(self, usuario_logado: Usuario, login_alvo: str) -> List[Reserva]:
         self._check_admin(usuario_logado)
         return self.reserva_manager.listar_reservas_por_usuario(login_alvo)
+
+    # --- MEMENTO: Undo/Redo ---
+    def desfazer(self) -> str:
+        snap = self.history.undo(self.reserva_manager._snapshot())
+        if not snap:
+            return "Nada para desfazer."
+        self.reserva_manager.restore_from(snap)
+        return "Operação desfeita com sucesso."
+
+    def refazer(self) -> str:
+        snap = self.history.redo(self.reserva_manager._snapshot())
+        if not snap:
+            return "Nada para refazer."
+        self.reserva_manager.restore_from(snap)
+        return "Operação refeita com sucesso."
+
+    # --- STRATEGY: alternar política de conflito ---
+    def definir_estrategia_conflito(self, modo: str) -> str:
+        """Seleciona a política de conflito: 'estrito' (default) ou 'leniente'."""
+        if modo.lower().startswith("leni"):
+            self.reserva_manager.strategy = LenientConflictStrategy()
+            return "Estratégia de conflito definida para: leniente (margem 5min)."
+        else:
+            self.reserva_manager.strategy = StrictConflictStrategy()
+            return "Estratégia de conflito definida para: estrito (sem sobreposição)."

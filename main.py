@@ -1,4 +1,4 @@
-# main.py (menus completos; sem Adapter)
+# main.py — menus com Undo/Redo + troca de Strategy (admin)
 from controller import FacadeSingletonController
 from exceptions import *
 from models import Usuario
@@ -10,7 +10,9 @@ def menu_usuario(controller: FacadeSingletonController, usuario_logado: Usuario)
         print("2. Listar minhas reservas")
         print("3. Criar reserva")
         print("4. Cancelar minha reserva")
-        print("5. Sair para o menu principal")
+        print("5. Desfazer última ação")
+        print("6. Refazer última ação")
+        print("7. Sair para o menu principal")
         op = input("Opção: ").strip()
 
         try:
@@ -47,6 +49,12 @@ def menu_usuario(controller: FacadeSingletonController, usuario_logado: Usuario)
                 print(f"\n✅ Reserva {r.reserva_id} cancelada.")
 
             elif op == '5':
+                print(controller.desfazer())
+
+            elif op == '6':
+                print(controller.refazer())
+
+            elif op == '7':
                 break
             else:
                 print("❌ Opção inválida.")
@@ -65,7 +73,10 @@ def menu_admin(controller: FacadeSingletonController, usuario_logado: Usuario):
         print("6. Gerar relatório de uso das salas")
         print("7. Listar reservas por usuário")
         print("8. Consultar disponibilidade por data")
-        print("9. Sair para o menu principal")
+        print("9. Desfazer última ação")
+        print("10. Refazer última ação")
+        print("11. Definir estratégia de conflito (estrito/leniente)")
+        print("12. Sair para o menu principal")
         op = input("Opção: ").strip()
 
         try:
@@ -133,6 +144,17 @@ def menu_admin(controller: FacadeSingletonController, usuario_logado: Usuario):
                         print(f"- {sala_nome}: {', '.join(blocos) if blocos else 'Livre o dia todo'}")
 
             elif op == '9':
+                print(controller.desfazer())
+
+            elif op == '10':
+                print(controller.refazer())
+
+            elif op == '11':
+                modo = input("Escolha a estratégia (estrito/leniente): ").strip().lower()
+                msg = controller.definir_estrategia_conflito(modo)
+                print(f"\n✅ {msg}")
+
+            elif op == '12':
                 break
             else:
                 print("❌ Opção inválida.")

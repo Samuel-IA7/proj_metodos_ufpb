@@ -1,4 +1,4 @@
-# infra_ram.py (Implementações em memória)
+# infra_ram.py (Implementações em memória) — agora com all()/replace_all() p/ snapshots
 from typing import Dict, Iterable, Optional, List
 from models import Usuario, Sala, Reserva
 from repository import UserDAO, SalaDAO, ReservaDAO
@@ -40,6 +40,19 @@ class UserDAORAM(UserDAO):
         if u:
             self._id_of_login.pop(u.login, None)
 
+    # ---- Suporte a Memento ----
+    def all(self) -> List[Usuario]:
+        return list(self._by_id.values())
+
+    def replace_all(self, new_items: List[Usuario]) -> None:
+        self._by_id.clear()
+        self._id_of_login.clear()
+        self._next_id = 1
+        for u in new_items:
+            uid = self._alloc_id()
+            self._by_id[uid] = u
+            self._id_of_login[u.login] = uid
+
 # --------- SALAS ----------
 class SalaDAORAM(SalaDAO):
     def __init__(self):
@@ -60,6 +73,15 @@ class SalaDAORAM(SalaDAO):
 
     def delete(self, sala_id: int) -> bool:
         return self._salas.pop(sala_id, None) is not None
+
+    # ---- Suporte a Memento ----
+    def all(self) -> List[Sala]:
+        return list(self._salas.values())
+
+    def replace_all(self, new_items: List[Sala]) -> None:
+        self._salas = {s.sala_id: s for s in new_items}
+        # recalcula próximo id (máximo existente + 1; se vazio, volta a 1)
+        self._next_id = (max(self._salas.keys()) + 1) if self._salas else 1
 
 # --------- RESERVAS ----------
 class ReservaDAORAM(ReservaDAO):
@@ -91,3 +113,11 @@ class ReservaDAORAM(ReservaDAO):
 
     def delete(self, rid: int) -> None:
         self._reservas.pop(rid, None)
+
+    # ---- Suporte a Memento ----
+    def all(self) -> List[Reserva]:
+        return list(self._reservas.values())
+
+    def replace_all(self, new_items: List[Reserva]) -> None:
+        self._reservas = {r.reserva_id: r for r in new_items}
+        self._next_id = (max(self._reservas.keys()) + 1) if self._reservas else 1

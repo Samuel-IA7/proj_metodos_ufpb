@@ -1,0 +1,67 @@
+Facade & Singleton: Laranja
+
+Abstract Factory: Lilás
+
+Memento: Salmão
+
+Strategy: Verde claro
+
+Adapter: Amarelo claro
+
+Análise dos Padrões de Projeto Aplicados
+1. Facade e Singleton
+
+Padrão: Facade, combinado com Singleton.
+
+Descrição: O padrão Facade fornece uma interface unificada e simplificada para um conjunto complexo de subsistemas. O Singleton garante que uma classe tenha apenas uma única instância e fornece um ponto de acesso global a ela.
+
+Aplicação no Projeto: A classe FacadeSingletonController atua como um único ponto de entrada para toda a lógica de negócio do sistema. Em vez de a camada de apresentação (main.py) precisar conhecer e instanciar UserManager, SalaManager, ReservaManager e HistoryService separadamente, ela simplesmente interage com a fachada. A aplicação do Singleton, através do método get_instance(), garante que toda a aplicação compartilhe o mesmo estado e a mesma instância dos managers e DAOs, evitando inconsistências.
+
+Benefício: Reduz o acoplamento entre a camada de apresentação (main.py) e as complexidades da lógica de negócio, simplificando o uso do sistema e centralizando o controle das operações.
+
+2. Abstract Factory
+
+Padrão: Abstract Factory.
+
+Descrição: Fornece uma interface para criar famílias de objetos relacionados ou dependentes sem especificar suas classes concretas.
+
+Aplicação no Projeto: A classe abstrata DAOFactory define a interface para criar os objetos de acesso a dados (DAOs). A classe RAMDAOFactory é a implementação concreta que cria instâncias dos DAOs que operam em memória (UserDAORAM, SalaDAORAM, ReservaDAORAM). O FacadeSingletonController utiliza esta fábrica para obter as instâncias dos DAOs, desacoplando o restante do sistema dos detalhes da implementação da persistência.
+
+Benefício: Aumenta a flexibilidade e a manutenibilidade do sistema. Se no futuro for necessário trocar o armazenamento em memória por um banco de dados, bastaria criar uma nova fábrica (ex: PostgresDAOFactory) sem precisar alterar os Managers ou o Controller.
+
+3. Memento
+
+Padrão: Memento.
+
+Descrição: Permite capturar e externalizar o estado interno de um objeto (sem violar o encapsulamento) para que ele possa ser restaurado posteriormente. É a base para implementar funcionalidades de desfazer/refazer.
+
+Aplicação no Projeto:
+
+Originator: A classe ReservaManager é quem detém o estado do sistema (listas de usuários, salas e reservas) e é responsável por criar um "snapshot" desse estado através do método _snapshot().
+
+Memento: A classe ReservationSnapshot é um objeto de dados que armazena o estado capturado de forma passiva.
+
+Caretaker: A classe HistoryService armazena uma pilha de ReservationSnapshot para gerenciar as operações de "desfazer" (undo) e "refazer" (redo).
+O FacadeSingletonController coordena o processo, solicitando que um memento seja salvo no HistoryService antes de operações críticas e usando o serviço para restaurar um estado anterior.
+
+Benefício: Permite implementar a funcionalidade de desfazer/refazer de forma limpa, segura e desacoplada, sem expor a estrutura interna dos dados gerenciados pelo ReservaManager.
+
+4. Strategy
+
+Padrão: Strategy.
+
+Descrição: Define uma família de algoritmos, encapsula cada um deles e os torna intercambiáveis. Permite que o algoritmo varie independentemente dos clientes que o utilizam.
+
+Aplicação no Projeto: A validação de conflitos de horário em reservas pode seguir diferentes regras. A interface ConflictStrategy define um contrato único para este algoritmo de validação. As classes StrictConflictStrategy (sem sobreposição) e LenientConflictStrategy (com margem de 5 minutos) fornecem implementações concretas e intercambiáveis. O ReservaManager possui um atributo strategy e delega a ele a tarefa de validar conflitos, podendo ter essa estratégia alterada dinamicamente pelo administrador.
+
+Benefício: Oferece grande flexibilidade para adicionar ou modificar as regras de negócio de conflito de reservas no futuro, sem a necessidade de alterar a classe ReservaManager.
+
+5. Adapter
+
+Padrão: Adapter.
+
+Descrição: Converte a interface de uma classe em outra interface que o cliente espera, permitindo que classes com interfaces incompatíveis trabalhem juntas.
+
+Aplicação no Projeto: O sistema define uma interface de logging própria e simplificada (AppLogger). A implementação, no entanto, utiliza a biblioteca logging padrão do Python, que possui uma interface diferente e mais complexa. A classe PythonLoggingAdapter atua como um adaptador: ela implementa a interface AppLogger e, internamente, "traduz" as chamadas (info, warning) para os métodos correspondentes da biblioteca logging. Os Managers dependem apenas da interface AppLogger, não da biblioteca externa.
+
+Benefício: Desacopla a lógica de negócio de uma biblioteca de terceiros. Se for decidido usar outra biblioteca de logging, basta criar um novo adaptador sem alterar nenhuma classe dos Managers.
